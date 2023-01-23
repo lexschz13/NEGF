@@ -5,6 +5,7 @@ from .interact_tensor import *
 from .matsubarafft import *
 from .conjugates import *
 from time import time
+from joblib import Parallel,delayed # Paralelization
 
 
 
@@ -287,7 +288,8 @@ class Solver:
         None.
 
         """
-        for n in range(self.Nt-1):
+        # for n in range(self.Nt-1):
+        def pooled(i, n):
             #Over indiced could happen near edges, conditional slice avoids it
             slc = slice(None) if n+self.interpol.k+1<=self.Nt else slice(None,self.Nt-n-interpol.k-1)
             self.GR[n+1:max(n+self.interpol.k+1,self.Nt),n] = vide_start(self.interpol,
@@ -297,6 +299,7 @@ class Solver:
                                                             self.GR[n,n], #y0
                                                             "ij,jk->ik", "ij,jk->ik", #sum criterions
                                                             conjugate=False)[slc]
+        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nt-1)))
     
     
     def __step_iter_GR(self, n):
@@ -313,7 +316,8 @@ class Solver:
         None.
 
         """
-        for m in range(self.Nt-n):
+        # for m in range(self.Nt-n):
+        def pooled(i, m):
             self.GR[m+n,m] = vide_step(self.interpol,
                              1j*(H0[None,...]+Ht[m:]+self.SHF[m:]), #p
                              -1j*self.__delta_time_orb[m:], #q
@@ -321,6 +325,7 @@ class Solver:
                              self.GR[m:m+n,m], #y
                              "ij,jk-ik", "ij,jk,ik", #sum criterions
                              conjugate=False)
+        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
     
     
     def __boot_iter_GI(self):
@@ -333,7 +338,8 @@ class Solver:
 
         """
         self.__QI = np.swapaxes(Matsubaraifft(np.einsum("...ij,...jk->...ik", Matsubarafft(np.swapaxes(self.SI, 0, 1), self.beta, self.particle), Matsubarafft(Matsubaraflip(self.GM,self.particle), self.beta, self.particle)), self.beta, self.particle), 0, 1)
-        for n in range(self.Nmats):
+        # for n in range(self.Nmats):
+        def pooled(i, n):
             self.GI[1:self.interpol.k+1,n] = vide_start(self.interpol,
                                                         1j*(self.H0[None,...]+self.Ht+self.SHF), #p
                                                         -1j*self.__QI[:,n], #q
@@ -341,6 +347,7 @@ class Solver:
                                                         self.GI[0,n], #y0
                                                         "ij,jk->ik", "ij,jk->ik", #sum criterions
                                                          conjugate=False)
+        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nmats)))
     
     
     def __step_iter_GI(self, n):
@@ -357,7 +364,8 @@ class Solver:
         None.
 
         """
-        for m in range(self.Nmats):
+        # for m in range(self.Nmats):
+        def pooled(i, m):
             self.GI[n,m] = vide_step(self.interpol,
                            1j*(self.H0[None,...] + self.Ht + self.SHF), #p
                            -1j*self.__QI[:,m], #q
@@ -365,6 +373,7 @@ class Solver:
                            self.GI[:n,m], #y
                            "ij,jk->ik", "ij,jk->ik", #sum criterions
                            conjugate=False)
+        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nmats)))
     
     
     def __boot_iter_GL(self):
@@ -382,7 +391,8 @@ class Solver:
         GJ = ItoJ(self.GI, self.particle)
         self.__QL = (self.ht*np.einsum("ml,slij,lmjk->smik", self.interpol.gregory_weights(self.Nt-1), self.SL, GA) -
               1j*self.htau*np.einsum("l,slij,lmjk->smik", self.interpolM.gregory_weights(self.Nmats-1)[-1,:], self.SI, GJ))
-        for n in range(1,self.Nt):
+        # for n in range(1,self.Nt):
+        def pooled(i, n):
             self.GL[1:min(self.interpol.k+1,n+1),n] = vide_start(self.interpol,
                                                         1j*(self.H0[None,...]+self.Ht+self.SHF), #p
                                                         -1j*self.__QL[:,n], #q
@@ -391,6 +401,7 @@ class Solver:
                                                         "ij,jk->ik", "ij,jk->ik", #sum criterions
                                                          conjugate=False)[:,min(self.interpol.k+1,n+1)] #Only upper trienangle is computed since it is hermitian
             self.GL[n,1:min(self.interpol.k+1,n+1)] = -self.GL[1:min(self.interpol.k+1,n+1),n].T.conj() #Updating lower triangle
+        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(1,self.Nt)))
     
     
     def __step_iter_GL(self, n):
@@ -408,7 +419,8 @@ class Solver:
         None.
 
         """
-        for m in range(n,self.Nt):
+        # for m in range(n,self.Nt):
+        def pooled(i, m):
             self.GL[n,m] = vide_step(self.interpol,
                            1j*(self.H0[None,...]+self.Ht+self.SHF), #p
                            -1j*self.__QL[:,m], #q
@@ -417,6 +429,7 @@ class Solver:
                            "ij,jk->ik", "ij,jk->ik", #sum criterions
                            conjugate=False)
             self.GL[n,m] = -self.GL[m,n].T.conj() #Updating lower triangle
+        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(n,self.Nt)))
     
     
     def __boot_iter_WR(self):
@@ -430,7 +443,8 @@ class Solver:
         """
         self.__ER = np.einsum("male,...exab,bnxk->...mnlk", self.V, PR, self.V)
         self.WR[np.arange(self.Nt),np.arange(self.Nt),...] = np.einsum("ss..->s...", self.__ER) #Initializing screen WR(t,t) = vPR(t,t)v
-        for n in range(self.Nt-1):
+        # for n in range(self.Nt-1):
+        def pooled(i, n):
             #Over indices could happen near edges, conditional slice avoids it
             slc = slice(None) if n+self.interpol.k+1<=self.Nt else slice(None,self.Nt-n-interpol.k-1)
             self.WR[n+1:max(n+self.interpol.k+1,self.Nt),n] = vie_start(self.interpol,
@@ -439,6 +453,7 @@ class Solver:
                                                             self.WR[n,n], #y0
                                                             "male,exab->mxlb", #sum criterion
                                                             conjugate=False)[slc]
+        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nt-1)))
     
     
     def __step_iter_WR(self, n):
@@ -455,13 +470,15 @@ class Solver:
         None.
 
         """
-        for m in range(self.Nt-n):
+        # for m in range(self.Nt-n):
+        def pooled(i, m):
             self.WR[m+n,m] = vie_step(self.interpol,
                              self.__ER[m:,m], #q
                              -np.einsum("male,...exab->mxlb", self.V, self.PR[m:,m:]), #K
                              self.WR[m:m+n,m], #y
                              "male,exab->mxlb", #sum criterion
                              conjugate=False)
+        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
     
     
     def __boot_iter_WI(self):
@@ -476,13 +493,15 @@ class Solver:
         self.__EI = (np.einsum("male,...exab,bnxk->...mnlk", self.V, PI, self.V) +
               Matsubaraifft(np.einsum("male,swexab,wbnxk->swmnlk", self.V, np.swapaxes(Matsubarafft(np.swapaxes(self.PI,0,1), self.beta, 0),0,1), Matsubarafft(Matsubaraflip(self.WM,0), self.beta, 0)), self.beta, 0))
         self.WI[0,...] = __EI[0,...] #Initializing screen WI(0,t') = EI(0,t')
-        for n in range(self.Nmats):
+        # for n in range(self.Nmats):
+        def pooled(i, n):
             self.WI[1:self.interpol.k+1,n] = vie_start(self.interpol,
                                                         self.__EI[:,n], #q
                                                         -np.einsum("male,...exab->mxlb", self.V, self.PR), #K
                                                         self.WI[0,n], #y0
                                                         "male,exab->mxlb", #sum criterion
                                                          conjugate=False)
+        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nmats)))
     
     
     def __step_iter_WI(self, n):
@@ -499,13 +518,15 @@ class Solver:
         None.
 
         """
-        for m in range(self.Nmats):
+        # for m in range(self.Nmats):
+        def pooled(i, m):
             self.WI[n,m] = vie_start(self.interpol,
                                      self.__EI[:,m], #q
                                      -np.einsum("male,...exab->mxlb", self.V, self.PR), #K
                                      self.WI[:n,m], #y
                                      "male,exab->mxlb", #sum criterion
                                      conjugate=False)
+        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nmats)))
     
     
     def __boot_iter_WL(self):
@@ -522,7 +543,8 @@ class Solver:
               np.einsum("gf,male,sfexab,fgbnxk->sgmnlk", self.interpol.gregory_wieghts(self.Nt-1), self.V, self.PL, RtoA(self.WR)) -
               1j*np.einsum("f,male,sfexab,fgbnxk->sgmnlk", self.interpolM.gregory_weights(self.Nmats-1)[-1,:], self.V, self.PI, ItoJ(self.WI, 0)))
         self.WL[0,...] = __EL[0,...] #Initializing screen WL(0,t') = vPL(0,t')v - i integ(0 to beta)[vPI(0,tau)WJ(tau,t')dtau]
-        for n in range(1,self.Nt):
+        # for n in range(1,self.Nt):
+        def pooled(i, n):
             self.WL[1:min(self.interpol.k+1,n+1),n] = vie_start(self.interpol,
                                                         self.__EL[:,n], #q
                                                         -np.einsum("male,...exab,->mxlb", self.V, self.PR), #K
@@ -530,6 +552,7 @@ class Solver:
                                                         "male,exab->mxlb", #sum criterion
                                                          conjugate=False)[:,min(self.interpol.k+1,n+1)] #Only upper trienangle is computed since it is hermitian
             self.WL[n,1:min(self.interpol.k+1,n+1)] = -np.einsum("...klnm->...mnlk", self.WL[1:min(self.interpol.k+1,n+1),n]).conj() #Updating lower triangle
+        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(1,self.Nt)))
     
     
     def __step_iter_WL(self, n):
@@ -547,7 +570,8 @@ class Solver:
         None.
 
         """
-        for m in range(n,self.Nt):
+        # for m in range(n,self.Nt):
+        def pooled(i, m):
             self.WL[n,m] = vie_start(self.interpol,
                                      self.__EL[:,m], #q
                                      -np.einsum("male,...exab,->mxlb", self.V, self.PR), #K
@@ -555,6 +579,7 @@ class Solver:
                                      "male,exab->mxlb", #sum criterion
                                      conjugate=False)
             self.WL[m,n] = -np.einsum("klnm->mnlk", self.WL[n,m]).conj() #Updating lower triangle
+        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
     
     
     def __update_polarization_bubbles(self):

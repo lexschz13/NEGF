@@ -71,7 +71,7 @@ class Interpolator:
         m = self.w.shape[0]
         new_row = np.zeros(m+1)
         new_row[-1] = 1/self.a[0]
-        new_row[:-1] = -new_row[-1]*np.sum(self.a[1:][:,None]*self.w[m-1:m-inti.k-1:-1,:], axis=0)
+        new_row[:-1] = -new_row[-1]*np.sum(self.a[1:][:,None]*self.w[m-1:m-self.k-1:-1,:], axis=0)
         self.w = np.append(self.w, np.zeros(m)[:,None], axis=1)
         self.w = np.append(self.w, new_row[None,:], axis=0)
     

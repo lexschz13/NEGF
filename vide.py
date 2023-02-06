@@ -44,7 +44,7 @@ def vide_start(interpol, p, q, K, y0, p_sum_criterion, K_sum_criterion, conjugat
     rows = np.einsum("...i,j->...ij", idxs, np.ones(idxs.shape[1], dtype=idxs.dtype))
     cols = np.einsum("...i,j->...ji", idxs, np.ones(idxs.shape[1], dtype=idxs.dtype))
     
-    wh_same_orbitals = np.where(np.prod([rows[k]==cols[k] for k in range(1,idxs.shape[0])]), axis=0)
+    wh_same_orbitals = np.where(np.prod([rows[k]==cols[k] for k in range(1,idxs.shape[0])], axis=0))
     wh_same_times = np.where(rows[0]==cols[0])
     
     if type(p_sum_criterion) is str:
@@ -67,12 +67,12 @@ def vide_start(interpol, p, q, K, y0, p_sum_criterion, K_sum_criterion, conjugat
     p_slices = tuple(p_slices[k] for k in range(p_slices.shape[0])) #Slice works as tuple of arrays
     
     #Index coincidence with source correspond to a row and coincidence with y corresponds to a column by matrix product rules
-    Kq_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[2].index(f)] for e in K_sum_criterion[0] for e in K_sum_criterion[2] if e==f])
-    Ky_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[1].index(f)] for e in K_sum_criterion[0] for e in K_sum_criterion[1] if e==f])
-    Ks = K * interpol.s.reshape(interpol.s.shape+(1,)*len(kernell_orbital_shape)) #Multiplication by integration weights
+    Kq_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[2].index(f)] for e in K_sum_criterion[0] for f in K_sum_criterion[2] if e==f])
+    Ky_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[1].index(f)] for e in K_sum_criterion[0] for f in K_sum_criterion[1] if e==f])
+    Ks = K * interpol.s.reshape(interpol.s.shape+(1,)*len(kernell_orbital_shape))[:K.shape[0],:K.shape[1]] #Multiplication by integration weights
     K_slices = np.zeros((len(kernell_orbital_shape)+2,q.size,q.size), dtype=idxs.dtype)
-    K_slices[0] += rows
-    K_slices[1] += cols
+    K_slices[0] += rows[0]
+    K_slices[1] += cols[0]
     K_slices[Kq_coincidences[:,0]+2] += rows[Kq_coincidences[:,1]+1][0]
     K_slices[Ky_coincidences[:,0]+2] += cols[Ky_coincidences[:,1]+1][0]
     K_slices = tuple(K_slices[k] for k in range(K_slices.shape[0])) #Slice works as tuple of arrays
@@ -84,7 +84,7 @@ def vide_start(interpol, p, q, K, y0, p_sum_criterion, K_sum_criterion, conjugat
     
     Mcut = M[np.where((rows[0]>0)*(cols[0]>0))].reshape(((time_size-1)*np.prod(source_orbital_shape),)*2)
     Minit = M[np.where((rows[0]>0)*(cols[0]==0))].reshape(((time_size-1)*np.prod(source_orbital_shape),)+(np.prod(source_orbital_shape),)) @ y0.flatten()
-    yboot = np.linalg.inv(Mcut) @ (q.flatten()-Minit)
+    yboot = np.linalg.inv(Mcut) @ (q[1:].flatten()-Minit)
     return yboot.reshape((time_size-1,)+source_orbital_shape)
 
 
@@ -128,7 +128,6 @@ def vide_step(interpol, p, q, K, y, p_sum_criterion, K_sum_criterion, conjugate=
     K = K[n,:n+1] #Only current time-step, one-time-label
     q = q[n] #Only current time-step, zero-time label
     
-    time_size = q.shape[0]
     source_orbital_shape = q.shape
     kernell_orbital_shape = K.shape[1:]
     weight_orbital_shape = p.shape
@@ -157,17 +156,16 @@ def vide_step(interpol, p, q, K, y, p_sum_criterion, K_sum_criterion, conjugate=
     pq_coincidences = np.array([[p_sum_criterion[0].index(e), p_sum_criterion[2].index(f)] for e in p_sum_criterion[0] for f in p_sum_criterion[2] if e==f])
     py_coincidences = np.array([[p_sum_criterion[0].index(e), p_sum_criterion[1].index(f)] for e in p_sum_criterion[0] for f in p_sum_criterion[1] if e==f])
     p_slices = np.zeros((len(weight_orbital_shape),wh_same_times[0].size), dtype=idxs.dtype)
-    p_slices[0] += rows[0][wh_same_times] #In VIE product with weight involves a delta on time
     p_slices[pq_coincidences[:,0]] += rows[pq_coincidences[:,1]+1][0][wh_same_times]
     p_slices[py_coincidences[:,0]] += cols[py_coincidences[:,1]+1][0][wh_same_times]
     p_slices = tuple(p_slices[k] for k in range(p_slices.shape[0])) #Slice works as tuple of arrays
     
     #Index coincidence with source correspond to a row and coincidence with y corresponds to a column by matrix product rules
-    Kq_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[2].index(f)] for e in K_sum_criterion[0] for e in K_sum_criterion[2] if e==f])
-    Ky_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[1].index(f)] for e in K_sum_criterion[0] for e in K_sum_criterion[1] if e==f])
+    Kq_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[2].index(f)] for e in K_sum_criterion[0] for f in K_sum_criterion[2] if e==f])
+    Ky_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[1].index(f)] for e in K_sum_criterion[0] for f in K_sum_criterion[1] if e==f])
     Kw = K * w.reshape(w.shape+(1,)*len(kernell_orbital_shape)) #Multiplication by integration weights
     K_slices = np.zeros((len(kernell_orbital_shape)+1,q.size,q.size*(n+1)), dtype=idxs.dtype)
-    K_slices[0] += cols
+    K_slices[0] += cols[0]
     K_slices[Kq_coincidences[:,0]+1] += rows[Kq_coincidences[:,1]+1][0]
     K_slices[Ky_coincidences[:,0]+1] += cols[Ky_coincidences[:,1]+1][0]
     K_slices = tuple(K_slices[k] for k in range(K_slices.shape[0])) #Slice works as tuple of arrays
@@ -177,8 +175,8 @@ def vide_step(interpol, p, q, K, y, p_sum_criterion, K_sum_criterion, conjugate=
     M[wh_same_times] += p[p_slices]
     M += interpol.h * Kw[K_slices]
     
-    Mcut = M[np.where(cols[0]<n)].reshape((q.size,(time_size-1)*q.size)) @ y[:n].flatten()
-    Mfinal = M[np.where(cols[0]==n)].reshape(source_orbital_shape)
+    Mcut = M[np.where(cols[0]<n)].reshape((q.size,n*q.size)) @ y[:n].flatten()
+    Mfinal = M[np.where(cols[0]==n)].reshape((q.size,q.size))
     ystep = np.linalg.inv(Mfinal) @ (q.flatten()-Mcut)
     return ystep.reshape(source_orbital_shape)
 
@@ -209,7 +207,7 @@ def vie_start(interpol, q, K, y0, K_sum_criterion, conjugate=False):
 
     """
     q = q[:interpol.k+1]
-    K = K[:interpol.k+1,:interpol.K+1]
+    K = K[:interpol.k+1,:interpol.k+1]
     
     time_size = q.shape[0]
     source_orbital_shape = q.shape[1:]
@@ -228,23 +226,23 @@ def vie_start(interpol, q, K, y0, K_sum_criterion, conjugate=False):
         K_sum_criterion = list(np.array(K_sum_criterion)[np.array([1,0,2])])
     
     #Index coincidence with source correspond to a row and coincidence with y corresponds to a column by matrix product rules
-    Kq_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[2].index(f)] for e in K_sum_criterion[0] for e in K_sum_criterion[2] if e==f])
-    Ky_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[1].index(f)] for e in K_sum_criterion[0] for e in K_sum_criterion[1] if e==f])
-    Ks = K * interpol.s.reshape(s.shape+(1,)*len(kernell_orbital_shape)) #Multiplication by integration weights
+    Kq_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[2].index(f)] for e in K_sum_criterion[0] for f in K_sum_criterion[2] if e==f])
+    Ky_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[1].index(f)] for e in K_sum_criterion[0] for f in K_sum_criterion[1] if e==f])
+    Ks = K * interpol.s.reshape(interpol.s.shape+(1,)*len(kernell_orbital_shape))[:K.shape[0],:K.shape[1]] #Multiplication by integration weights
     K_slices = np.zeros((len(kernell_orbital_shape)+2,q.size,q.size), dtype=idxs.dtype)
-    K_slices[0] += rows
-    K_slices[1] += cols
+    K_slices[0] += rows[0]
+    K_slices[1] += cols[0]
     K_slices[Kq_coincidences[:,0]+2] += rows[Kq_coincidences[:,1]+1][0]
     K_slices[Ky_coincidences[:,0]+2] += cols[Ky_coincidences[:,1]+1][0]
     K_slices = tuple(K_slices[k] for k in range(K_slices.shape[0])) #Slice works as tuple of arrays
     
     M = np.zeros((q.size,q.size), dtype=np.complex128)
-    M += np.eye(M.shape) #In VIE there is a delta in time and orbitals
+    M += np.eye(M.shape[0]) #In VIE there is a delta in time and orbitals
     M += interpol.h * Ks[K_slices]
     
     Mcut = M[np.where((rows[0]>0)*(cols[0]>0))].reshape(((time_size-1)*np.prod(source_orbital_shape),)*2)
     Minit = M[np.where((rows[0]>0)*(cols[0]==0))].reshape(((time_size-1)*np.prod(source_orbital_shape),)+(np.prod(source_orbital_shape),)) @ y0.flatten()
-    yboot = np.linalg.inv(Mcut) @ (q.flatten()-Minit)
+    yboot = np.linalg.inv(Mcut) @ (q[1:].flatten()-Minit)
     return yboot.reshape((time_size-1,)+source_orbital_shape)
 
 
@@ -280,10 +278,9 @@ def vie_step(interpol, q, K, y, K_sum_criterion, conjugate=False):
     if conjugate:
         K = np.swapaxes(K,0,1)
     
-    K = K[n,:] #Only current time-step, one-time-label
+    K = K[n,:n+1] #Only current time-step, one-time-label
     q = q[n] #Only current time-step, zero-time label
     
-    time_size = q.shape[0]
     source_orbital_shape = q.shape
     kernell_orbital_shape = K.shape[1:]
     
@@ -299,11 +296,11 @@ def vie_step(interpol, q, K, y, K_sum_criterion, conjugate=False):
         K_sum_criterion = list(np.array(K_sum_criterion)[np.array([1,0,2])])
     
     #Index coincidence with source correspond to a row and coincidence with y corresponds to a column by matrix product rules
-    Kq_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[2].index(f)] for e in K_sum_criterion[0] for e in K_sum_criterion[2] if e==f])
-    Ky_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[1].index(f)] for e in K_sum_criterion[0] for e in K_sum_criterion[1] if e==f])
+    Kq_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[2].index(f)] for e in K_sum_criterion[0] for f in K_sum_criterion[2] if e==f])
+    Ky_coincidences = np.array([[K_sum_criterion[0].index(e), K_sum_criterion[1].index(f)] for e in K_sum_criterion[0] for f in K_sum_criterion[1] if e==f])
     Kw = K * w.reshape(w.shape+(1,)*len(kernell_orbital_shape)) #Multiplication by integration weights
     K_slices = np.zeros((len(kernell_orbital_shape)+1,q.size,q.size*(n+1)), dtype=idxs.dtype)
-    K_slices[0] += cols
+    K_slices[0] += cols[0]
     K_slices[Kq_coincidences[:,0]+1] += rows[Kq_coincidences[:,1]+1][0]
     K_slices[Ky_coincidences[:,0]+1] += cols[Ky_coincidences[:,1]+1][0]
     K_slices = tuple(K_slices[k] for k in range(K_slices.shape[0])) #Slice works as tuple of arrays
@@ -313,7 +310,7 @@ def vie_step(interpol, q, K, y, K_sum_criterion, conjugate=False):
     M[wh_all_same] += 1 #In VIE there is a delta in time and orbitals
     M += interpol.h * Kw[K_slices]
     
-    Mcut = M[np.where(cols[0]<n)].reshape((q.size,(time_size-1)*q.size)) @ y[:n].flatten()
-    Mfinal = M[np.where(cols[0]==n)].reshape(source_orbital_shape)
+    Mcut = M[np.where(cols[0]<n)].reshape((q.size,n*q.size)) @ y[:n].flatten()
+    Mfinal = M[np.where(cols[0]==n)].reshape((q.size,q.size))
     ystep = np.linalg.inv(Mfinal) @ (q.flatten()-Mcut)
     return ystep.reshape(source_orbital_shape)

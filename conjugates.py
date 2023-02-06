@@ -1,5 +1,5 @@
 from .imports import *
-from .Matsubarafft import Matsubaraflip
+from .matsubarafft import Matsubaraflip
 
 
 
@@ -21,7 +21,7 @@ def RtoA(C, typeC=None):
 
     """
     if len(C.shape)==4 or typeC=="M":
-        return np.swapaxes(C, 0, 1).T.conj()
+        return np.einsum("mlij->lmji", C).conj()
     elif len(C.shape)==6 or typeC=="T":
         return np.einsum("stmnlk->tsklnm", C.conj())
 
@@ -46,6 +46,6 @@ def ItoJ(C, particle, typeC=None):
 
     """
     if len(C.shape)==4 or typeC=="M":
-        return -Matsubaraflip(np.swapaxes(C, 0, 1).T.conj(), particle)
+        return -Matsubaraflip(np.einsum("mlij->lmji", C).conj(), particle)
     elif len(C.shape)==6 or typeC=="T":
         return -Matsubaraflip(np.einsum("stmnlk->tsklnm", C.conj()), particle)

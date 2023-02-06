@@ -92,7 +92,7 @@ class Solver:
         Solve Green's functions by self-consistend method.
     
     """
-    def __init__(self, Nt, Nmats, ht, inter_order, T, H0, Ht, V, particle, convergence_limit=1e-12, max_iter=1e4):
+    def __init__(self, Nt, Nmats, ht, inter_order, T, H0, Ht, V, particle, convergence_limit=1e-12, max_iter=1e4, useHDD=False):
         """
         Initialize solver.
 
@@ -117,9 +117,11 @@ class Solver:
         particle : int
             Indicates particle type: 0 for boson and 1 for fermion.
         convergence_limit : float
-            Maximum error between old and new functions to consider convergence.
+            Maximum error between old and new functions to consider convergence. Default is 1e-12.
         max_iter : int
-            Iterations where convergence achievement is expected.
+            Iterations where convergence achievement is expected. Default is 1e4.
+        useHDD : bool
+            To use hard disk for Green's functions storage. Dafault is False.
 
         Raises
         ------
@@ -142,7 +144,7 @@ class Solver:
         self.interpol = Interpolator(inter_order, ht)
         
         self.t = np.arange(0,Nt*ht,ht)
-        self.tau = np.linspace(0,beta,Nmats)
+        self.tau = np.linspace(0,self.beta,Nmats)
         self.htau = self.tau[1]-self.tau[0]
         self.interpolM = Interpolator(inter_order, self.htau)
         
@@ -160,38 +162,37 @@ class Solver:
             raise ValueError("Non valid particle type. See documentation for more.")
         self.stat_factor = (-1)**particle
         
-        useHDD = kwargs.get("useHDD", False)
         if useHDD:
             pass
         else:
             #Green's functions
-            self.GM = np.zeros((Nmats,)+H.shape, dtype=np.complex128)
-            self.GI = np.zeros((Nt,Nmats)+H.shape, dtype=np.complex128)
-            self.GR = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
-            self.GL = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
+            self.GM = np.zeros((Nmats,)+H0.shape, dtype=np.complex128)
+            self.GI = np.zeros((Nt,Nmats)+H0.shape, dtype=np.complex128)
+            self.GR = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
+            self.GL = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
             #Self energies
-            self.SHF = np.zeros((Nt,)+H.shape, dtype=np.complex128)
-            self.SM = np.zeros((Nmats,)+H.shape, dtype=np.complex128)
-            self.SI = np.zeros((Nt,Nmats)+H.shape, dtype=np.complex128)
-            self.SR = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
-            self.SL = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
+            self.SHF = np.zeros((Nt,)+H0.shape, dtype=np.complex128)
+            self.SM = np.zeros((Nmats,)+H0.shape, dtype=np.complex128)
+            self.SI = np.zeros((Nt,Nmats)+H0.shape, dtype=np.complex128)
+            self.SR = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
+            self.SL = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
             #Polarizatin bubbles
-            self.PM = np.zeros((Nmats,)+H.shape*2, dtype=np.complex128)
-            self.PI = np.zeros((Nt,Nmats)+H.shape*2, dtype=np.complex128)
-            self.PR = np.zeros((Nt,Nt)+H.shape*2, dtype=np.complex128)
-            self.PL = np.zeros((Nt,Nt)+H.shape*2, dtype=np.complex128)
+            self.PM = np.zeros((Nmats,)+H0.shape*2, dtype=np.complex128)
+            self.PI = np.zeros((Nt,Nmats)+H0.shape*2, dtype=np.complex128)
+            self.PR = np.zeros((Nt,Nt)+H0.shape*2, dtype=np.complex128)
+            self.PL = np.zeros((Nt,Nt)+H0.shape*2, dtype=np.complex128)
             #Screened interactions
-            self.WM = np.zeros((Nmats,)+H.shape*2, dtype=np.complex128)
-            self.WI = np.zeros((Nt,Nmats)+H.shape*2, dtype=np.complex128)
-            self.WR = np.zeros((Nt,Nt)+H.shape*2, dtype=np.complex128)
-            self.WL = np.zeros((Nt,Nt)+H.shape*2, dtype=np.complex128)
+            self.WM = np.zeros((Nmats,)+H0.shape*2, dtype=np.complex128)
+            self.WI = np.zeros((Nt,Nmats)+H0.shape*2, dtype=np.complex128)
+            self.WR = np.zeros((Nt,Nt)+H0.shape*2, dtype=np.complex128)
+            self.WL = np.zeros((Nt,Nt)+H0.shape*2, dtype=np.complex128)
             #VIDE sources
-            self.__QI = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
-            self.__QL = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
+            self.__QI = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
+            self.__QL = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
             #VIE sources
-            self.__ER = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
-            self.__EI = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
-            self.__EL = np.zeros((Nt,Nt)+H.shape, dtype=np.complex128)
+            self.__ER = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
+            self.__EI = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
+            self.__EL = np.zeros((Nt,Nt)+H0.shape, dtype=np.complex128)
         
         #Non-interactive G
         k = np.arange(2*Nmats) - Nmats
@@ -199,11 +200,11 @@ class Solver:
         self.g = Matsubaraifft(np.linalg.inv(1j*self.mats_freq[:,None,None]*np.eye(H0.shape[0]) - H0[None,:,:]), self.beta, self.particle)
         
         #GR initial condition
-        GRidxs = np.indices(GR.shape)
-        GR[np.where((GRidxs[0]==GRidxs[1])*(GRidxs[2]==GRidxs[3]))] -= 1j
+        GRidxs = np.indices(self.GR.shape)
+        self.GR[np.where((GRidxs[0]==GRidxs[1])*(GRidxs[2]==GRidxs[3]))] -= 1j
         
         self.convergence_limit = convergence_limit
-        self.max_iter = kwargs = max_iter
+        self.max_iter = max_iter
     
     
     def __hartree_fock_init(self):
@@ -223,7 +224,7 @@ class Solver:
         print("Initializing Hartree-Fock self-energy")
         count = 0
         while True:
-            gHF = Matsubaraifft(np.linalg.inv(1j*self.mats_freq[:,None,None]*np.eye(H0.shape[0]) - H0[None,:,:] - self.SHF[0][None,:,:]), self.beta, self.particle)
+            gHF = Matsubaraifft(np.linalg.inv(1j*self.mats_freq[:,None,None]*np.eye(self.H0.shape[0]) - self.H0[None,:,:] - self.SHF[0][None,:,:]), self.beta, self.particle)
             #gHF_at_beta = self.stat_factor*gHF[0]
             newSHF = -np.einsum("lk,mkln->mn", gHF[0], self.V-np.swapaxes(self.V,-1,-2))
             distance = np.sum(abs(newSHF-self.SHF[0]))
@@ -253,8 +254,8 @@ class Solver:
         print("Initializing Matsubara branch")
         count = 0
         while True:
-            self.GM = Matsubaraifft(np.linalg.inv(1j*self.mats_freq[:,None,None]*np.eye(H0.shape[0]) - H0[None,:,:] - self.SHF[0][None,:,:] - self.SM), self.beta, self.particle)
-            self.PM = -np.einsum("...ln,...km->...lkmn", self.GM, Matsubaraflip(self.GM, self.beta, self.particle))
+            self.GM = Matsubaraifft(np.linalg.inv(1j*self.mats_freq[:,None,None]*np.eye(self.H0.shape[0]) - self.H0[None,:,:] - self.SHF[0][None,:,:] - self.SM), self.beta, self.particle)
+            self.PM = -np.einsum("...ln,...km->...lkmn", self.GM, Matsubaraflip(self.GM, self.particle))
             fP = Matsubarafft(self.PM, self.beta, 0) #Bubble is always a boson
             fZ = np.einsum("...iakb,...bcad->...ickd", self.V, fP)
             I = np.einsum("il,jk->ijkl", np.eye(self.V.shape[0]), np.eye(self.V.shape[0]))
@@ -263,9 +264,9 @@ class Solver:
             #(I-Z)_ickd W_djcl = Z_ickd v_djcl
             #W_djcl = inv(I-Z)_dkci (Zv)_ijkl
             #fW = np.einsum("...dkci,...ijkl->...djcl", tensor_inv(I-Z), np.einsum("...ickd,...djcl->...ijkl", Z, v))
-            fW = np.einsum("...akbi,...ickd,...djcl->ajbl", tensor_inv(I-Z), Z, v)
+            fW = np.einsum("...akbi,...ickd,...djcl->...ajbl", tensor_inv(I-fZ), fZ, self.V)
             self.WM = Matsubaraifft(fW, self.beta, 0) #Interaction is always a boson
-            newSM = np.einsum("lk,mkln->mn", self.GM, self.WM)
+            newSM = np.einsum("...lk,...mkln->...mn", self.GM, self.WM)
             distance = np.sum(abs(newSM-self.SM))
             self.SM = np.copy(newSM)
             count += 1
@@ -275,7 +276,7 @@ class Solver:
             if count==self.max_iter:
                 raise RuntimeError("Convergence not get at required iterations")
         print("Recomputing Matsubara Green's function after convergence")
-        self.GM = Matsubaraifft(np.linalg.inv(1j*self.mats_freq[:,None,None]*np.eye(H0.shape[0]) - H0[None,:,:] - self.SHF[0][None,:,:] - self.SM), self.beta, self.particle)
+        self.GM = Matsubaraifft(np.linalg.inv(1j*self.mats_freq[:,None,None]*np.eye(self.H0.shape[0]) - self.H0[None,:,:] - self.SHF[0][None,:,:] - self.SM), self.beta, self.particle)
         self.GI[0,:] = 1j*Matsubaraflip(self.GM, self.particle) #Initialize left-mixed
     
     
@@ -291,15 +292,15 @@ class Solver:
         # for n in range(self.Nt-1):
         def pooled(i, n):
             #Over indiced could happen near edges, conditional slice avoids it
-            slc = slice(None) if n+self.interpol.k+1<=self.Nt else slice(None,self.Nt-n-interpol.k-1)
-            self.GR[n+1:max(n+self.interpol.k+1,self.Nt),n] = vide_start(self.interpol,
+            slc = slice(None) if n+self.interpol.k+1<=self.Nt else slice(None,self.Nt-n-1)
+            self.GR[n+1:min(n+self.interpol.k+1,self.Nt),n] = vide_start(self.interpol,
                                                             1j*(self.H0[None,...]+self.Ht[n:]+self.SHF[n:]), #p
                                                             -1j*self.__delta_time_orb[n:,n], #q
                                                             1j*self.SR[n:,n:], #K
                                                             self.GR[n,n], #y0
                                                             "ij,jk->ik", "ij,jk->ik", #sum criterions
                                                             conjugate=False)[slc]
-        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nt-1)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nt-1)))
     
     
     def __step_iter_GR(self, n):
@@ -319,13 +320,13 @@ class Solver:
         # for m in range(self.Nt-n):
         def pooled(i, m):
             self.GR[m+n,m] = vide_step(self.interpol,
-                             1j*(H0[None,...]+Ht[m:]+self.SHF[m:]), #p
-                             -1j*self.__delta_time_orb[m:], #q
+                             1j*(self.H0[None,...]+self.Ht[m:]+self.SHF[m:]), #p
+                             -1j*self.__delta_time_orb[m:,m], #q
                              1j*self.SR[m:,m:], #K
                              self.GR[m:m+n,m], #y
-                             "ij,jk-ik", "ij,jk,ik", #sum criterions
+                             "ij,jk->ik", "ij,jk->ik", #sum criterions
                              conjugate=False)
-        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
     
     
     def __boot_iter_GI(self):
@@ -337,7 +338,7 @@ class Solver:
         None.
 
         """
-        self.__QI = np.swapaxes(Matsubaraifft(np.einsum("...ij,...jk->...ik", Matsubarafft(np.swapaxes(self.SI, 0, 1), self.beta, self.particle), Matsubarafft(Matsubaraflip(self.GM,self.particle), self.beta, self.particle)), self.beta, self.particle), 0, 1)
+        self.__QI = np.swapaxes(Matsubaraifft(np.einsum("...ij,...jk->...ik", Matsubarafft(np.swapaxes(self.SI, 0, 1), self.beta, self.particle), Matsubarafft(Matsubaraflip(self.GM,self.particle)[:,None], self.beta, self.particle)), self.beta, self.particle), 0, 1)
         # for n in range(self.Nmats):
         def pooled(i, n):
             self.GI[1:self.interpol.k+1,n] = vide_start(self.interpol,
@@ -347,7 +348,7 @@ class Solver:
                                                         self.GI[0,n], #y0
                                                         "ij,jk->ik", "ij,jk->ik", #sum criterions
                                                          conjugate=False)
-        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nmats)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nmats)))
     
     
     def __step_iter_GI(self, n):
@@ -373,7 +374,7 @@ class Solver:
                            self.GI[:n,m], #y
                            "ij,jk->ik", "ij,jk->ik", #sum criterions
                            conjugate=False)
-        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nmats)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nmats)))
     
     
     def __boot_iter_GL(self):
@@ -399,9 +400,9 @@ class Solver:
                                                         1j*self.SR, #K
                                                         self.GL[0,n], #y0
                                                         "ij,jk->ik", "ij,jk->ik", #sum criterions
-                                                         conjugate=False)[:,min(self.interpol.k+1,n+1)] #Only upper trienangle is computed since it is hermitian
-            self.GL[n,1:min(self.interpol.k+1,n+1)] = -self.GL[1:min(self.interpol.k+1,n+1),n].T.conj() #Updating lower triangle
-        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(1,self.Nt)))
+                                                         conjugate=False)[:min(self.interpol.k+1,n+1)-1] #Only upper trienangle is computed since it is hermitian
+            self.GL[n,1:min(self.interpol.k+1,n+1)] = -self.GL[1:min(self.interpol.k+1,n+1),n].transpose(0,2,1).conj() #Updating lower triangle
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(1,self.Nt)))
     
     
     def __step_iter_GL(self, n):
@@ -429,7 +430,7 @@ class Solver:
                            "ij,jk->ik", "ij,jk->ik", #sum criterions
                            conjugate=False)
             self.GL[n,m] = -self.GL[m,n].T.conj() #Updating lower triangle
-        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(n,self.Nt)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(n,self.Nt)))
     
     
     def __boot_iter_WR(self):
@@ -441,19 +442,19 @@ class Solver:
         None.
 
         """
-        self.__ER = np.einsum("male,...exab,bnxk->...mnlk", self.V, PR, self.V)
-        self.WR[np.arange(self.Nt),np.arange(self.Nt),...] = np.einsum("ss..->s...", self.__ER) #Initializing screen WR(t,t) = vPR(t,t)v
+        self.__ER = np.einsum("male,...exab,bnxk->...mnlk", self.V, self.PR, self.V)
+        self.WR[np.arange(self.Nt),np.arange(self.Nt),...] = np.einsum("ss...->s...", self.__ER) #Initializing screen WR(t,t) = vPR(t,t)v
         # for n in range(self.Nt-1):
         def pooled(i, n):
             #Over indices could happen near edges, conditional slice avoids it
-            slc = slice(None) if n+self.interpol.k+1<=self.Nt else slice(None,self.Nt-n-interpol.k-1)
-            self.WR[n+1:max(n+self.interpol.k+1,self.Nt),n] = vie_start(self.interpol,
+            slc = slice(None) if n+self.interpol.k+1<=self.Nt else slice(None,self.Nt-n-1)
+            self.WR[n+1:min(n+self.interpol.k+1,self.Nt),n] = vie_start(self.interpol,
                                                             self.__ER[n:,n], #q
-                                                            -np.einsum("male,...exab->mxlb", self.V, self.PR[n:,n:]), #K
+                                                            -np.einsum("male,...exab->...mxlb", self.V, self.PR[n:,n:]), #K
                                                             self.WR[n,n], #y0
                                                             "male,exab->mxlb", #sum criterion
                                                             conjugate=False)[slc]
-        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nt-1)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nt-1)))
     
     
     def __step_iter_WR(self, n):
@@ -474,11 +475,11 @@ class Solver:
         def pooled(i, m):
             self.WR[m+n,m] = vie_step(self.interpol,
                              self.__ER[m:,m], #q
-                             -np.einsum("male,...exab->mxlb", self.V, self.PR[m:,m:]), #K
+                             -np.einsum("male,...exab->...mxlb", self.V, self.PR[m:,m:]), #K
                              self.WR[m:m+n,m], #y
                              "male,exab->mxlb", #sum criterion
                              conjugate=False)
-        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
     
     
     def __boot_iter_WI(self):
@@ -490,18 +491,18 @@ class Solver:
         None.
 
         """
-        self.__EI = (np.einsum("male,...exab,bnxk->...mnlk", self.V, PI, self.V) +
+        self.__EI = (np.einsum("male,...exab,bnxk->...mnlk", self.V, self.PI, self.V) +
               Matsubaraifft(np.einsum("male,swexab,wbnxk->swmnlk", self.V, np.swapaxes(Matsubarafft(np.swapaxes(self.PI,0,1), self.beta, 0),0,1), Matsubarafft(Matsubaraflip(self.WM,0), self.beta, 0)), self.beta, 0))
-        self.WI[0,...] = __EI[0,...] #Initializing screen WI(0,t') = EI(0,t')
+        self.WI[0,...] = self.__EI[0,...] #Initializing screen WI(0,t') = EI(0,t')
         # for n in range(self.Nmats):
         def pooled(i, n):
             self.WI[1:self.interpol.k+1,n] = vie_start(self.interpol,
                                                         self.__EI[:,n], #q
-                                                        -np.einsum("male,...exab->mxlb", self.V, self.PR), #K
+                                                        -np.einsum("male,...exab->...mxlb", self.V, self.PR), #K
                                                         self.WI[0,n], #y0
                                                         "male,exab->mxlb", #sum criterion
                                                          conjugate=False)
-        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nmats)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(self.Nmats)))
     
     
     def __step_iter_WI(self, n):
@@ -520,13 +521,13 @@ class Solver:
         """
         # for m in range(self.Nmats):
         def pooled(i, m):
-            self.WI[n,m] = vie_start(self.interpol,
+            self.WI[n,m] = vie_step(self.interpol,
                                      self.__EI[:,m], #q
-                                     -np.einsum("male,...exab->mxlb", self.V, self.PR), #K
+                                     -np.einsum("male,...exab->...mxlb", self.V, self.PR), #K
                                      self.WI[:n,m], #y
                                      "male,exab->mxlb", #sum criterion
                                      conjugate=False)
-        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nmats)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nmats)))
     
     
     def __boot_iter_WL(self):
@@ -539,20 +540,21 @@ class Solver:
         None.
 
         """
-        self.__EL = (np.einsum("male,...exab,bnxk->...mnlk", self.V, PL, self.V) +
-              np.einsum("gf,male,sfexab,fgbnxk->sgmnlk", self.interpol.gregory_wieghts(self.Nt-1), self.V, self.PL, RtoA(self.WR)) -
+        self.__EL = (np.einsum("male,...exab,bnxk->...mnlk", self.V, self.PL, self.V) +
+              np.einsum("gf,male,sfexab,fgbnxk->sgmnlk", self.interpol.gregory_weights(self.Nt-1), self.V, self.PL, RtoA(self.WR)) -
               1j*np.einsum("f,male,sfexab,fgbnxk->sgmnlk", self.interpolM.gregory_weights(self.Nmats-1)[-1,:], self.V, self.PI, ItoJ(self.WI, 0)))
-        self.WL[0,...] = __EL[0,...] #Initializing screen WL(0,t') = vPL(0,t')v - i integ(0 to beta)[vPI(0,tau)WJ(tau,t')dtau]
+        self.WL[0,...] = self.__EL[0,...] #Initializing screen WL(0,t') = vPL(0,t')v - i integ(0 to beta)[vPI(0,tau)WJ(tau,t')dtau]
         # for n in range(1,self.Nt):
         def pooled(i, n):
+            print(n)
             self.WL[1:min(self.interpol.k+1,n+1),n] = vie_start(self.interpol,
                                                         self.__EL[:,n], #q
-                                                        -np.einsum("male,...exab,->mxlb", self.V, self.PR), #K
+                                                        -np.einsum("male,...exab->...mxlb", self.V, self.PR), #K
                                                         self.WL[0,n], #y0
                                                         "male,exab->mxlb", #sum criterion
-                                                         conjugate=False)[:,min(self.interpol.k+1,n+1)] #Only upper trienangle is computed since it is hermitian
+                                                         conjugate=False)[:min(self.interpol.k+1,n+1)-1] #Only upper trienangle is computed since it is hermitian
             self.WL[n,1:min(self.interpol.k+1,n+1)] = -np.einsum("...klnm->...mnlk", self.WL[1:min(self.interpol.k+1,n+1),n]).conj() #Updating lower triangle
-        Parallel(n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(1,self.Nt)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,n) for i,n in enumerate(range(1,self.Nt)))
     
     
     def __step_iter_WL(self, n):
@@ -572,14 +574,14 @@ class Solver:
         """
         # for m in range(n,self.Nt):
         def pooled(i, m):
-            self.WL[n,m] = vie_start(self.interpol,
+            self.WL[n,m] = vie_step(self.interpol,
                                      self.__EL[:,m], #q
-                                     -np.einsum("male,...exab,->mxlb", self.V, self.PR), #K
+                                     -np.einsum("male,...exab->...mxlb", self.V, self.PR), #K
                                      self.WL[:n,m], #y
                                      "male,exab->mxlb", #sum criterion
                                      conjugate=False)
             self.WL[m,n] = -np.einsum("klnm->mnlk", self.WL[n,m]).conj() #Updating lower triangle
-        Parallel(n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
+        Parallel(mmap_mode="w+", n_jobs=-1)(delayed(pooled)(i,m) for i,m in enumerate(range(self.Nt-n)))
     
     
     def __update_polarization_bubbles(self):
@@ -592,10 +594,10 @@ class Solver:
 
         """
         self.PR = -1j*np.einsum("abln,bakm->ablkmn", self.GR, self.GL) - 1j*np.einsum("abln,bakm->ablkmn", self.GL, RtoA(self.GR))
-        self.PI = -1j*np.einsum("abln,bakm->ablkmn", self.GI, ItoJ(self.GI))
+        self.PI = -1j*np.einsum("abln,bakm->ablkmn", self.GI, ItoJ(self.GI, 0))
         GG = self.GR - RtoA(self.GR) + self.GL
         self.PL = -1j*np.einsum("abln,bakm->ablkmn", self.GL, GG)
-        self.__ER = np.einsum("male,...exab,bnxk->...mnlk", self.V, PR, self.V)
+        self.__ER = np.einsum("male,...exab,bnxk->...mnlk", self.V, self.PR, self.V)
     
     
     def __update_self_energy(self):
@@ -607,7 +609,7 @@ class Solver:
         None.
 
         """
-        self.SHF = 1j*np.einsum("sslk,mkln->smn", GL, self.V-np.swapaxes(self.V,-1,-2))
+        self.SHF = 1j*np.einsum("sslk,mkln->smn", self.GL, self.V-np.swapaxes(self.V,-1,-2))
         self.SR  = 1j*np.einsum("...lk,...mkln->...mn", self.GR, self.WL) + 1j*np.einsum("...lk,...mkln->...mn", self.GL, self.WR)
         self.SI  = 1j*np.einsum("...lk,...mkln->...mn", self.GI, self.WI)
         self.SL  = 1j*np.einsum("...lk,...mkln->...mn", self.GL, self.WL)
@@ -651,7 +653,7 @@ class Solver:
             for n in range(self.interpol.k+1,self.Nt):
                 self.__step_iter_GL(n)
             
-            self.__update_polarization()
+            self.__update_polarization_bubbles()
             
             #Screen bootstrap
             self.__boot_iter_WR()
